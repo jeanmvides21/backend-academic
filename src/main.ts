@@ -7,19 +7,10 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
-  // Habilitar CORS
   app.enableCors();
-  
-  // Prefijo global para todas las rutas
   app.setGlobalPrefix('api');
-  
-  // Filtro de excepciones global
   app.useGlobalFilters(new AllExceptionsFilter());
-  
-  // Interceptor de transformación global
   app.useGlobalInterceptors(new TransformInterceptor());
-  
-  // Validación global
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

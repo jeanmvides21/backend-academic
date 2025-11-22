@@ -22,7 +22,6 @@ export class MysqlService implements OnModuleInit, OnModuleDestroy {
 
     this.pool = mysql.createPool(config);
     
-    // Probar la conexión
     try {
       const connection = await this.pool.getConnection();
       console.log('Conexión a MySQL establecida correctamente');

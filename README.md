@@ -2,205 +2,220 @@
 
 API REST desarrollada con NestJS para la gestión de horarios académicos.
 
-## Tecnologías
+## Requisitos Previos
 
-- NestJS 10.x
-- TypeScript 5.x
-- Supabase (PostgreSQL)
-- class-validator
-- class-transformer
+Se requiere tener instalado:
 
-## Estructura del Proyecto
+- **Node.js** (versión 18 o superior)
+- **npm** (viene incluido con Node.js)
+- **XAMPP** (para MySQL)
+- **MySQL** (incluido en XAMPP)
 
-```
-src/
-├── auth/                      # Autenticación
-│   ├── dto/                   # Data Transfer Objects
-│   ├── auth.controller.ts     # Controlador de autenticación
-│   ├── auth.service.ts        # Lógica de negocio
-│   └── auth.module.ts         # Módulo de autenticación
-│
-├── usuarios/                  # Gestión de estudiantes
-│   ├── dto/
-│   ├── usuarios.controller.ts
-│   ├── usuarios.service.ts
-│   └── usuarios.module.ts
-│
-├── asignaturas/              # Gestión de asignaturas
-│   ├── dto/
-│   ├── asignaturas.controller.ts
-│   ├── asignaturas.service.ts
-│   └── asignaturas.module.ts
-│
-├── horarios/                 # Gestión de horarios
-│   ├── dto/
-│   ├── horarios.controller.ts
-│   ├── horarios.service.ts
-│   └── horarios.module.ts
-│
-├── supabase/                 # Cliente Supabase
-│   ├── supabase.service.ts
-│   └── supabase.module.ts
-│
-├── common/                   # Utilidades comunes
-│   ├── filters/              # Filtros de excepciones
-│   └── interceptors/         # Interceptores HTTP
-│
-├── app.module.ts             # Módulo principal
-└── main.ts                   # Punto de entrada
-```
+## Instalación
 
-## Configuración
+1. Abrir una terminal en la carpeta `backend-academic`
 
-### Variables de Entorno
-
-Crear archivo `.env` en la raíz del proyecto:
-
-```env
-# Supabase Configuration (Credenciales de prueba)
-SUPABASE_URL=https://zzonvngelvlczxxrfpjg.supabase.co
-SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6b252bmdlbHZsY3p4eHJmcGpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM3NDgxMzksImV4cCI6MjA3OTMyNDEzOX0.exRbczJiJfRTOccH2_oVnKgqJmpwCds2n2QIcM83imc
-
-# Server Configuration
-PORT=3000
-NODE_ENV=development
-
-
-### Instalación
-
+2. Instalar las dependencias del proyecto:
 ```bash
 npm install
 ```
 
-### Ejecución
+Este comando descargará e instalará todas las librerías necesarias (NestJS, MySQL, JWT, etc.)
+
+## Configuración de la Base de Datos
+
+1. Iniciar XAMPP y asegurarse de que MySQL esté corriendo
+
+2. Abrir phpMyAdmin en el navegador: **http://localhost/phpmyadmin**
+
+3. Crear una nueva base de datos llamada `gestion_academica`:
+
+
+4. Ejecutar el script SQL:
+   - Seleccionar la base de datos `gestion_academica`
+   - Ir a la pestaña "Importar"
+   - Hacer clic en "Elegir archivo" y seleccionar: `database/database_setup_mysql.sql`
+   - Hacer clic en "Continuar"
+
+   Esto creará las tablas y datos de prueba necesarios.
+
+## Ejecución
+
+Para iniciar el servidor en modo desarrollo:
 
 ```bash
-# Modo desarrollo
 npm run start:dev
-
-# Modo producción
-npm run build
-npm run start
 ```
 
-## Endpoints de la API
+El servidor estará disponible en: **http://localhost:3000**
+
+**Nota:** El backend tiene habilitado CORS para permitir requests desde el frontend. Todas las rutas tienen el prefijo `/api`, por lo que los endpoints completos son: `http://localhost:3000/api/*`
+
+
+## Credenciales de Acceso
+
+### Administrador
+- **Correo:** `admin@admin.com`
+- **Contraseña:** `admin123`
+
+### Estudiantes
+Para los estudiantes, el correo es el mismo que está registrado en la base de datos y la contraseña es:
+- **Contraseña:** `password123`
+
+Ejemplos de estudiantes de prueba:
+- `juan.perez@example.com` / `password123`
+- `maria.lopez@example.com` / `password123`
+- `carlos.martinez@example.com` / `password123`
+
+## Verificar que Funciona
+
+1. Abre Postman
+
+2. Prueba el endpoint de login:
+   - URL: `http://localhost:3000/auth/login`
+   - Método: POST
+   - Headers: `Content-Type: application/json`
+   - Body (JSON):
+   ```json
+   {
+     "correo": "admin@admin.com",
+     "password": "admin123"
+   }
+   ```
+
+3. Si se recibe una respuesta con `access_token`, el backend está funcionando correctamente.
+
+## Compilación para Producción
+
+Para generar los archivos compilados:
+
+```bash
+npm run build
+```
+
+Para ejecutar en producción:
+
+```bash
+npm run start:prod
+```
+
+## Estructura del Proyecto
+
+```
+backend-academic/
+├── src/
+│   ├── auth/              # Módulo de autenticación
+│   ├── usuarios/          # Módulo de usuarios
+│   ├── asignaturas/       # Módulo de asignaturas
+│   ├── horarios/          # Módulo de horarios
+│   ├── mysql/             # Servicio de base de datos
+│   └── common/            # Utilidades compartidas
+├── database/
+│   └── database_setup_mysql.sql  # Script de base de datos
+├── package.json
+└── README.md
+```
+
+## Endpoints Principales
 
 ### Autenticación
-```
-POST   /api/auth/login
-Body: { correo: string, password: string }
-Response: { id, cedula, nombre, correo, telefono, rol }
-```
-
-### Usuarios (Estudiantes)
-```
-GET    /api/usuarios
-GET    /api/usuarios/:id
-POST   /api/usuarios
-Body: { cedula, nombre, correo, telefono, rol, password }
-PUT    /api/usuarios/:id
-DELETE /api/usuarios/:id
-```
-
-### Asignaturas
-```
-GET    /api/asignaturas
-GET    /api/asignaturas/:id
-POST   /api/asignaturas
-Body: { nombre, descripcion, maxclasessemana }
-PUT    /api/asignaturas/:id
-DELETE /api/asignaturas/:id
-```
-
-### Horarios
-```
-GET    /api/horarios
-GET    /api/horarios/:id
-POST   /api/horarios
-Body: { dia, hora_inicio, hora_fin, id_usuario, id_asignatura }
-PUT    /api/horarios/:id
-DELETE /api/horarios/:id
-```
-
-## Validaciones
-
-### CreateUsuarioDto
-- cedula: string (5-20 caracteres)
-- nombre: string (2-100 caracteres)
-- correo: email válido
-- telefono: string (7-20 caracteres)
-- rol: 'admin' | 'estudiante'
-- password: string (6-50 caracteres)
-
-### CreateAsignaturaDto
-- nombre: string (2-100 caracteres)
-- descripcion: string opcional (máx 500 caracteres)
-- maxclasessemana: número entre 1 y 10
-
-### CreateHorarioDto
-- dia: enum válido (Lunes-Domingo)
-- hora_inicio: formato HH:mm
-- hora_fin: formato HH:mm
-- id_usuario: número positivo
-- id_asignatura: número positivo
-
-## Reglas de Negocio
-
-### Horarios
-1. No puede haber solapamiento de horarios para el mismo estudiante
-2. No se puede exceder el límite de clases por semana de una asignatura
-3. La hora de fin debe ser posterior a la hora de inicio
-4. Las horas deben estar entre 06:00 y 22:00
+- `POST /auth/login` - Iniciar sesión
 
 ### Usuarios
-1. La cédula debe ser única
-2. El correo debe ser único
-3. La contraseña no se encripta (para simplicidad académica)
+- `GET /usuarios` - Listar usuarios
+- `GET /usuarios/:id` - Obtener usuario por ID
+- `POST /usuarios` - Crear usuario
+- `PATCH /usuarios/:id` - Actualizar usuario
+- `DELETE /usuarios/:id` - Eliminar usuario
 
-## Estructura de Base de Datos
+### Asignaturas
+- `GET /asignaturas` - Listar asignaturas
+- `GET /asignaturas/:id` - Obtener asignatura por ID
+- `POST /asignaturas` - Crear asignatura
+- `PATCH /asignaturas/:id` - Actualizar asignatura
+- `DELETE /asignaturas/:id` - Eliminar asignatura
 
-Ver archivo `database/database_setup.sql` para la estructura completa.
+### Horarios
+- `GET /horarios` - Listar horarios
+- `GET /horarios/:id` - Obtener horario por ID
+- `GET /horarios/usuario/:idUsuario` - Horarios por usuario
+- `POST /horarios` - Crear horario
+- `PATCH /horarios/:id` - Actualizar horario
+- `DELETE /horarios/:id` - Eliminar horario
 
-## Manejo de Errores
+**Nota:** Todos los endpoints excepto `/auth/login` requieren autenticación JWT. Incluye el token en el header: `Authorization: Bearer <token>`
 
-La API utiliza códigos HTTP estándar:
+## Tecnologías Utilizadas
 
-- 200: OK
-- 201: Created
-- 400: Bad Request
-- 401: Unauthorized
-- 404: Not Found
-- 409: Conflict
+### Framework y Lenguaje
+- **NestJS 10.3.0** - Framework Node.js progresivo basado en TypeScript
+- **TypeScript 5.3.3** - Superset de JavaScript con tipado estático
 
-Formato de respuesta de error:
-```json
-{
-  "statusCode": 400,
-  "message": "Mensaje de error descriptivo",
-  "error": "Bad Request"
-}
-```
+### Base de Datos
+- **MySQL 8.0+** - Sistema de gestión de bases de datos relacional
+- **mysql2 3.15.3** - Driver MySQL para Node.js con soporte async/await
 
-## Interceptores
+### Autenticación y Seguridad
+- **@nestjs/jwt 10.2.0** - Integración JWT para autenticación
+- **@nestjs/passport 10.0.3** - Estrategias de autenticación
+- **passport-jwt 4.0.1** - Estrategia JWT para Passport
+- **bcrypt 5.1.1** - Hashing de contraseñas
 
-### TransformInterceptor
-Envuelve todas las respuestas exitosas:
-```json
-{
-  "data": { ... },
-  "success": true
-}
-```
+### Validación
+- **class-validator 0.14.0** - Validación basada en decoradores
+- **class-transformer 0.5.1** - Transformación de objetos
 
-## Pruebas
+### Utilidades
+- **@nestjs/config 3.1.1** - Gestión de configuración y variables de entorno
+- **rxjs 7.8.1** - Programación reactiva
 
-```bash
-# Pruebas unitarias
-npm run test
+## Datos Importantes
 
-# Pruebas e2e
-npm run test:e2e
+### Configuración de Base de Datos
 
-# Cobertura
-npm run test:cov
-```
+El servicio MySQL (`src/mysql/mysql.service.ts`) utiliza valores por defecto si no se configuran variables de entorno:
+
+- **Host:** `localhost` (por defecto)
+- **Puerto:** `3306` (por defecto)
+- **Usuario:** `root` (por defecto)
+- **Contraseña:** vacía (por defecto)
+- **Base de datos:** `gestion_academica` (por defecto)
+
+
+### Reglas de Negocio
+
+1. **Validación de Solapamiento de Horarios:**
+   - No se pueden crear horarios que se solapen para el mismo estudiante
+   - El sistema valida automáticamente antes de crear o actualizar un horario
+
+2. **Máximo de Clases por Semana:**
+   - Cada asignatura tiene un límite de clases por semana
+   - El sistema valida que no se exceda este límite
+
+3. **Validaciones de Datos:**
+   - Cédula única por usuario
+   - Correo único por usuario
+   - Nombre de asignatura único
+
+### Estructura de Base de Datos
+
+- **Tabla `usuario`:** Almacena estudiantes y administradores
+- **Tabla `asignatura`:** Almacena las asignaturas disponibles
+- **Tabla `schedules`:** Almacena los horarios con relaciones a usuario y asignatura
+
+### Autenticación
+
+- Se utiliza JWT (JSON Web Tokens) para autenticación
+- El token se genera al hacer login y debe incluirse en todas las peticiones protegidas
+- El token expira después de 24 horas (configurable)
+
+### CORS
+
+- CORS está habilitado globalmente en `main.ts` para permitir requests desde cualquier origen
+
+### Prefijo de Rutas
+
+- Todas las rutas tienen el prefijo `/api` configurado globalmente
+- Ejemplo: `/auth/login` se accede como `/api/auth/login`
+
+
