@@ -7,13 +7,13 @@ import {
 } from 'class-validator';
 
 export enum DiaSemana {
-  LUNES = 'LUNES',
-  MARTES = 'MARTES',
-  MIERCOLES = 'MIERCOLES',
-  JUEVES = 'JUEVES',
-  VIERNES = 'VIERNES',
-  SABADO = 'SABADO',
-  DOMINGO = 'DOMINGO',
+  LUNES = 'Lunes',
+  MARTES = 'Martes',
+  MIERCOLES = 'Miércoles',
+  JUEVES = 'Jueves',
+  VIERNES = 'Viernes',
+  SABADO = 'Sábado',
+  DOMINGO = 'Domingo',
 }
 
 export class CreateHorarioDto {
@@ -21,14 +21,14 @@ export class CreateHorarioDto {
   dia: DiaSemana;
 
   @IsString()
-  @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, {
-    message: 'hora_inicio debe tener el formato HH:MM (24 horas)',
+  @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/, {
+    message: 'hora_inicio debe tener el formato HH:MM o HH:MM:SS (24 horas)',
   })
   hora_inicio: string;
 
   @IsString()
-  @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, {
-    message: 'hora_fin debe tener el formato HH:MM (24 horas)',
+  @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/, {
+    message: 'hora_fin debe tener el formato HH:MM o HH:MM:SS (24 horas)',
   })
   hora_fin: string;
 

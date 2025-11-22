@@ -1,255 +1,206 @@
-# Backend NestJS con Supabase
+# Backend - Sistema de Gestión Académica
 
-Backend desarrollado con NestJS y Supabase para la gestión de usuarios, asignaturas y horarios.
+API REST desarrollada con NestJS para la gestión de horarios académicos.
 
-## Características
+## Tecnologías
 
-- ✅ CRUD completo de Usuarios
-- ✅ CRUD completo de Asignaturas
-- ✅ CRUD completo de Horarios
-- ✅ Obtener horarios por usuario
-- ✅ Manejo de errores global
-- ✅ Autenticación JWT (opcional)
-- ✅ Validación de datos con class-validator
-- ✅ CORS habilitado
-
-## Requisitos Previos
-
-- Node.js (v18 o superior)
-- npm o yarn
-- Cuenta de Supabase
-
-## Instalación
-
-1. Clonar el repositorio o navegar al directorio del proyecto
-
-2. Instalar dependencias:
-```bash
-npm install
-```
-
-3. Configurar variables de entorno:
-```bash
-cp .env.example .env
-```
-
-Editar el archivo `.env` con tus credenciales de Supabase:
-```
-SUPABASE_URL=tu_url_de_supabase
-SUPABASE_KEY=tu_clave_anon_de_supabase
-JWT_SECRET=tu_secret_key_para_jwt
-JWT_EXPIRES_IN=24h
-PORT=3000
-```
-
-## Configuración de la Base de Datos en Supabase
-
-Ejecuta los siguientes scripts SQL en el SQL Editor de Supabase:
-
-### 1. Tabla `usuario`
-```sql
-CREATE TABLE usuario (
-  id SERIAL PRIMARY KEY,
-  nombre VARCHAR(100) NOT NULL,
-  correo VARCHAR(255) NOT NULL UNIQUE,
-  telefono VARCHAR(20),
-  password VARCHAR(255),
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-```
-
-### 2. Tabla `asignatura`
-```sql
-CREATE TABLE asignatura (
-  id SERIAL PRIMARY KEY,
-  nombre VARCHAR(100) NOT NULL UNIQUE,
-  descripcion TEXT,
-  maxClasesSemana INTEGER NOT NULL CHECK (maxClasesSemana >= 1 AND maxClasesSemana <= 10),
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-```
-
-### 3. Tabla `schedules`
-```sql
-CREATE TABLE schedules (
-  id SERIAL PRIMARY KEY,
-  dia VARCHAR(20) NOT NULL CHECK (dia IN ('LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO', 'DOMINGO')),
-  hora_inicio TIME NOT NULL,
-  hora_fin TIME NOT NULL,
-  id_usuario INTEGER NOT NULL REFERENCES usuario(id) ON DELETE CASCADE,
-  id_asignatura INTEGER NOT NULL REFERENCES asignatura(id) ON DELETE CASCADE,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
-  CONSTRAINT check_hora_fin_after_inicio CHECK (hora_fin > hora_inicio)
-);
-```
-
-### 4. Índices para mejorar el rendimiento
-```sql
-CREATE INDEX idx_schedules_usuario ON schedules(id_usuario);
-CREATE INDEX idx_schedules_asignatura ON schedules(id_asignatura);
-CREATE INDEX idx_schedules_dia ON schedules(dia);
-```
-
-### 5. Habilitar Row Level Security (RLS) - Opcional
-Si deseas usar RLS, puedes configurarlo según tus necesidades de seguridad.
-
-## Ejecutar la Aplicación
-
-### Modo desarrollo:
-```bash
-npm run start:dev
-```
-
-### Modo producción:
-```bash
-npm run build
-npm run start:prod
-```
-
-La aplicación estará disponible en `http://localhost:3000/api`
-
-## Endpoints de la API
-
-### Autenticación (JWT - Opcional)
-
-- `POST /api/auth/register` - Registrar nuevo usuario
-- `POST /api/auth/login` - Iniciar sesión
-
-### Usuarios
-
-- `GET /api/usuarios` - Obtener todos los usuarios
-- `GET /api/usuarios/:id` - Obtener usuario por ID
-- `POST /api/usuarios` - Crear nuevo usuario
-- `PATCH /api/usuarios/:id` - Actualizar usuario
-- `DELETE /api/usuarios/:id` - Eliminar usuario
-
-### Asignaturas
-
-- `GET /api/asignaturas` - Obtener todas las asignaturas
-- `GET /api/asignaturas/:id` - Obtener asignatura por ID
-- `POST /api/asignaturas` - Crear nueva asignatura
-- `PATCH /api/asignaturas/:id` - Actualizar asignatura
-- `DELETE /api/asignaturas/:id` - Eliminar asignatura
-
-### Horarios
-
-- `GET /api/horarios` - Obtener todos los horarios
-- `GET /api/horarios/:id` - Obtener horario por ID
-- `GET /api/horarios/usuario/:idUsuario` - Obtener horarios por usuario
-- `POST /api/horarios` - Crear nuevo horario
-- `PATCH /api/horarios/:id` - Actualizar horario
-- `DELETE /api/horarios/:id` - Eliminar horario
-
-## Ejemplos de Uso
-
-### Crear un Usuario
-```bash
-POST /api/usuarios
-Content-Type: application/json
-
-{
-  "nombre": "Juan Pérez",
-  "correo": "juan@example.com",
-  "telefono": "123456789"
-}
-```
-
-### Crear una Asignatura
-```bash
-POST /api/asignaturas
-Content-Type: application/json
-
-{
-  "nombre": "Matemáticas",
-  "descripcion": "Curso de matemáticas básicas",
-  "maxClasesSemana": 3
-}
-```
-
-### Crear un Horario
-```bash
-POST /api/horarios
-Content-Type: application/json
-
-{
-  "dia": "LUNES",
-  "hora_inicio": "08:00",
-  "hora_fin": "10:00",
-  "id_usuario": 1,
-  "id_asignatura": 1
-}
-```
-
-### Obtener Horarios por Usuario
-```bash
-GET /api/horarios/usuario/1
-```
-
-## Validaciones Implementadas
-
-- **Usuarios**: Validación de correo único, formato de email válido
-- **Asignaturas**: Validación de nombre único, máximo de clases por semana (1-10)
-- **Horarios**: 
-  - Validación de rango de horas (hora_fin > hora_inicio)
-  - Validación de máximo de clases por semana según la asignatura
-  - Prevención de solapamiento de horarios para el mismo usuario en el mismo día
-  - Validación de existencia de usuario y asignatura
-
-## Manejo de Errores
-
-El sistema incluye un filtro global de excepciones que captura y formatea todos los errores de manera consistente:
-
-```json
-{
-  "statusCode": 404,
-  "timestamp": "2024-01-01T00:00:00.000Z",
-  "path": "/api/usuarios/999",
-  "message": "Usuario con ID 999 no encontrado"
-}
-```
-
-## Autenticación JWT (Opcional)
-
-Para proteger rutas con JWT, usa el guard `JwtAuthGuard`:
-
-```typescript
-import { UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
-
-@UseGuards(JwtAuthGuard)
-@Get('protected')
-getProtectedData() {
-  return 'Esta ruta está protegida';
-}
-```
+- NestJS 10.x
+- TypeScript 5.x
+- Supabase (PostgreSQL)
+- class-validator
+- class-transformer
 
 ## Estructura del Proyecto
 
 ```
 src/
-├── app.module.ts
-├── main.ts
-├── auth/              # Módulo de autenticación JWT
-├── usuarios/          # Módulo de usuarios
-├── asignaturas/       # Módulo de asignaturas
-├── horarios/          # Módulo de horarios
-├── supabase/          # Configuración de Supabase
-└── common/            # Utilidades comunes (filtros, interceptores, DTOs)
+├── auth/                      # Autenticación
+│   ├── dto/                   # Data Transfer Objects
+│   ├── auth.controller.ts     # Controlador de autenticación
+│   ├── auth.service.ts        # Lógica de negocio
+│   └── auth.module.ts         # Módulo de autenticación
+│
+├── usuarios/                  # Gestión de estudiantes
+│   ├── dto/
+│   ├── usuarios.controller.ts
+│   ├── usuarios.service.ts
+│   └── usuarios.module.ts
+│
+├── asignaturas/              # Gestión de asignaturas
+│   ├── dto/
+│   ├── asignaturas.controller.ts
+│   ├── asignaturas.service.ts
+│   └── asignaturas.module.ts
+│
+├── horarios/                 # Gestión de horarios
+│   ├── dto/
+│   ├── horarios.controller.ts
+│   ├── horarios.service.ts
+│   └── horarios.module.ts
+│
+├── supabase/                 # Cliente Supabase
+│   ├── supabase.service.ts
+│   └── supabase.module.ts
+│
+├── common/                   # Utilidades comunes
+│   ├── filters/              # Filtros de excepciones
+│   └── interceptors/         # Interceptores HTTP
+│
+├── app.module.ts             # Módulo principal
+└── main.ts                   # Punto de entrada
 ```
 
-## Tecnologías Utilizadas
+## Configuración
 
-- **NestJS**: Framework de Node.js
-- **Supabase**: Backend as a Service (BaaS)
-- **TypeScript**: Lenguaje de programación
-- **class-validator**: Validación de DTOs
-- **Passport JWT**: Autenticación JWT
-- **bcrypt**: Hash de contraseñas
+### Variables de Entorno
 
-## Licencia
+Crear archivo `.env` en la raíz del proyecto:
 
-MIT
+```env
+# Supabase Configuration (Credenciales de prueba)
+SUPABASE_URL=https://zzonvngelvlczxxrfpjg.supabase.co
+SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6b252bmdlbHZsY3p4eHJmcGpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM3NDgxMzksImV4cCI6MjA3OTMyNDEzOX0.exRbczJiJfRTOccH2_oVnKgqJmpwCds2n2QIcM83imc
 
+# Server Configuration
+PORT=3000
+NODE_ENV=development
+
+
+### Instalación
+
+```bash
+npm install
+```
+
+### Ejecución
+
+```bash
+# Modo desarrollo
+npm run start:dev
+
+# Modo producción
+npm run build
+npm run start
+```
+
+## Endpoints de la API
+
+### Autenticación
+```
+POST   /api/auth/login
+Body: { correo: string, password: string }
+Response: { id, cedula, nombre, correo, telefono, rol }
+```
+
+### Usuarios (Estudiantes)
+```
+GET    /api/usuarios
+GET    /api/usuarios/:id
+POST   /api/usuarios
+Body: { cedula, nombre, correo, telefono, rol, password }
+PUT    /api/usuarios/:id
+DELETE /api/usuarios/:id
+```
+
+### Asignaturas
+```
+GET    /api/asignaturas
+GET    /api/asignaturas/:id
+POST   /api/asignaturas
+Body: { nombre, descripcion, maxclasessemana }
+PUT    /api/asignaturas/:id
+DELETE /api/asignaturas/:id
+```
+
+### Horarios
+```
+GET    /api/horarios
+GET    /api/horarios/:id
+POST   /api/horarios
+Body: { dia, hora_inicio, hora_fin, id_usuario, id_asignatura }
+PUT    /api/horarios/:id
+DELETE /api/horarios/:id
+```
+
+## Validaciones
+
+### CreateUsuarioDto
+- cedula: string (5-20 caracteres)
+- nombre: string (2-100 caracteres)
+- correo: email válido
+- telefono: string (7-20 caracteres)
+- rol: 'admin' | 'estudiante'
+- password: string (6-50 caracteres)
+
+### CreateAsignaturaDto
+- nombre: string (2-100 caracteres)
+- descripcion: string opcional (máx 500 caracteres)
+- maxclasessemana: número entre 1 y 10
+
+### CreateHorarioDto
+- dia: enum válido (Lunes-Domingo)
+- hora_inicio: formato HH:mm
+- hora_fin: formato HH:mm
+- id_usuario: número positivo
+- id_asignatura: número positivo
+
+## Reglas de Negocio
+
+### Horarios
+1. No puede haber solapamiento de horarios para el mismo estudiante
+2. No se puede exceder el límite de clases por semana de una asignatura
+3. La hora de fin debe ser posterior a la hora de inicio
+4. Las horas deben estar entre 06:00 y 22:00
+
+### Usuarios
+1. La cédula debe ser única
+2. El correo debe ser único
+3. La contraseña no se encripta (para simplicidad académica)
+
+## Estructura de Base de Datos
+
+Ver archivo `database/database_setup.sql` para la estructura completa.
+
+## Manejo de Errores
+
+La API utiliza códigos HTTP estándar:
+
+- 200: OK
+- 201: Created
+- 400: Bad Request
+- 401: Unauthorized
+- 404: Not Found
+- 409: Conflict
+
+Formato de respuesta de error:
+```json
+{
+  "statusCode": 400,
+  "message": "Mensaje de error descriptivo",
+  "error": "Bad Request"
+}
+```
+
+## Interceptores
+
+### TransformInterceptor
+Envuelve todas las respuestas exitosas:
+```json
+{
+  "data": { ... },
+  "success": true
+}
+```
+
+## Pruebas
+
+```bash
+# Pruebas unitarias
+npm run test
+
+# Pruebas e2e
+npm run test:e2e
+
+# Cobertura
+npm run test:cov
+```

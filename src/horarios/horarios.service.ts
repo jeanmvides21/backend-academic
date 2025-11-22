@@ -139,9 +139,46 @@ export class HorariosService {
       }
     }
 
+    // Normalizar formato de hora para PostgreSQL (HH:MM:SS)
+    const normalizarHora = (hora: string): string => {
+      if (!hora) return hora;
+      // Remover espacios en blanco
+      hora = hora.trim();
+      // Si viene en formato HH:MM, agregar :00
+      if (hora.match(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)) {
+        return hora + ':00';
+      }
+      // Si ya viene en formato HH:MM:SS, retornar tal cual
+      if (hora.match(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/)) {
+        return hora;
+      }
+      return hora;
+    };
+
+    // Validar que las horas estén en el rango permitido (06:00 - 22:00)
+    const validarRangoHora = (hora: string, campo: string): void => {
+      const horaFormateada = normalizarHora(hora);
+      const [horas, minutos] = horaFormateada.split(':').map(Number);
+      
+      if (horas < 6 || horas > 22 || (horas === 22 && minutos > 0)) {
+        throw new BadRequestException(
+          `${campo} debe estar entre 06:00 y 22:00. Valor recibido: ${hora}`
+        );
+      }
+    };
+
+    validarRangoHora(createHorarioDto.hora_inicio, 'hora_inicio');
+    validarRangoHora(createHorarioDto.hora_fin, 'hora_fin');
+
+    const horarioNormalizado = {
+      ...createHorarioDto,
+      hora_inicio: normalizarHora(createHorarioDto.hora_inicio),
+      hora_fin: normalizarHora(createHorarioDto.hora_fin),
+    };
+
     const { data, error } = await supabase
       .from('schedules')
-      .insert([createHorarioDto])
+      .insert([horarioNormalizado])
       .select(`
         *,
         usuario:usuario(*),
@@ -297,9 +334,45 @@ export class HorariosService {
       }
     }
 
+    // Normalizar formato de hora para PostgreSQL si se están actualizando
+    const normalizarHora = (hora: string): string => {
+      if (!hora) return hora;
+      hora = hora.trim();
+      if (hora.match(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)) {
+        return hora + ':00';
+      }
+      if (hora.match(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/)) {
+        return hora;
+      }
+      return hora;
+    };
+
+    const horarioActualizado: any = { ...updateHorarioDto };
+    
+    // Normalizar y validar horas si se están actualizando
+    if (horarioActualizado.hora_inicio) {
+      horarioActualizado.hora_inicio = normalizarHora(horarioActualizado.hora_inicio);
+      const [horas, minutos] = horarioActualizado.hora_inicio.split(':').map(Number);
+      if (horas < 6 || horas > 22 || (horas === 22 && minutos > 0)) {
+        throw new BadRequestException(
+          `hora_inicio debe estar entre 06:00 y 22:00. Valor recibido: ${updateHorarioDto.hora_inicio}`
+        );
+      }
+    }
+    
+    if (horarioActualizado.hora_fin) {
+      horarioActualizado.hora_fin = normalizarHora(horarioActualizado.hora_fin);
+      const [horas, minutos] = horarioActualizado.hora_fin.split(':').map(Number);
+      if (horas < 6 || horas > 22 || (horas === 22 && minutos > 0)) {
+        throw new BadRequestException(
+          `hora_fin debe estar entre 06:00 y 22:00. Valor recibido: ${updateHorarioDto.hora_fin}`
+        );
+      }
+    }
+
     const { data, error } = await supabase
       .from('schedules')
-      .update(updateHorarioDto)
+      .update(horarioActualizado)
       .eq('id', id)
       .select(`
         *,

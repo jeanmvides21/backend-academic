@@ -1,4 +1,4 @@
-import { IsString, IsEmail, IsOptional, MinLength, MaxLength } from 'class-validator';
+import { IsString, IsEmail, MinLength, MaxLength, IsIn } from 'class-validator';
 
 export class CreateUsuarioDto {
   @IsString()
@@ -18,5 +18,14 @@ export class CreateUsuarioDto {
   @MinLength(7)
   @MaxLength(20)
   telefono: string;
+
+  @IsString()
+  @IsIn(['admin', 'estudiante'])
+  rol: 'admin' | 'estudiante';
+
+  @IsString()
+  @MinLength(6)
+  @MaxLength(50)
+  password: string;
 }
 
