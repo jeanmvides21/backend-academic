@@ -106,7 +106,10 @@ export class HorariosService {
     // Verificar solapamiento de horarios
     const { data: horariosMismoDia } = await supabase
       .from('schedules')
-      .select('*')
+      .select(`
+        *,
+        asignatura:asignatura(*)
+      `)
       .eq('id_usuario', createHorarioDto.id_usuario)
       .eq('dia', createHorarioDto.dia);
 
@@ -121,8 +124,17 @@ export class HorariosService {
       );
 
       if (tieneSolapamiento) {
+        const horarioConflicto = horariosMismoDia.find((horario) =>
+          this.checkTimeOverlap(
+            createHorarioDto.hora_inicio,
+            createHorarioDto.hora_fin,
+            horario.hora_inicio,
+            horario.hora_fin,
+          ),
+        );
+        
         throw new ConflictException(
-          'El horario se solapa con otro horario existente para este usuario en el mismo día',
+          `El horario se cruza con ${horarioConflicto?.asignatura?.nombre || 'otra asignatura'} (${horarioConflicto?.hora_inicio.substring(0, 5)} - ${horarioConflicto?.hora_fin.substring(0, 5)})`,
         );
       }
     }
@@ -250,7 +262,10 @@ export class HorariosService {
     if (updateHorarioDto.hora_inicio || updateHorarioDto.hora_fin || updateHorarioDto.dia) {
       const { data: horariosMismoDia } = await supabase
         .from('schedules')
-        .select('*')
+        .select(`
+          *,
+          asignatura:asignatura(*)
+        `)
         .eq('id_usuario', idUsuario)
         .eq('dia', dia)
         .neq('id', id);
@@ -266,8 +281,17 @@ export class HorariosService {
         );
 
         if (tieneSolapamiento) {
+          const horarioConflicto = horariosMismoDia.find((horario) =>
+            this.checkTimeOverlap(
+              horaInicio,
+              horaFin,
+              horario.hora_inicio,
+              horario.hora_fin,
+            ),
+          );
+          
           throw new ConflictException(
-            'El horario se solapa con otro horario existente para este usuario en el mismo día',
+            `El horario se cruza con ${horarioConflicto?.asignatura?.nombre || 'otra asignatura'} (${horarioConflicto?.hora_inicio.substring(0, 5)} - ${horarioConflicto?.hora_fin.substring(0, 5)})`,
           );
         }
       }

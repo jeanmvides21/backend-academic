@@ -2,6 +2,11 @@ import { IsString, IsEmail, IsOptional, MinLength, MaxLength } from 'class-valid
 
 export class CreateUsuarioDto {
   @IsString()
+  @MinLength(5)
+  @MaxLength(20)
+  cedula: string;
+
+  @IsString()
   @MinLength(2)
   @MaxLength(100)
   nombre: string;
@@ -9,9 +14,9 @@ export class CreateUsuarioDto {
   @IsEmail()
   correo: string;
 
-  @IsOptional()
   @IsString()
+  @MinLength(7)
   @MaxLength(20)
-  telefono?: string;
+  telefono: string;
 }
 

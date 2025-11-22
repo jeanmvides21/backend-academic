@@ -15,15 +15,26 @@ export class UsuariosService {
   async create(createUsuarioDto: CreateUsuarioDto) {
     const supabase = this.supabaseService.getClient();
 
+    // Verificar si la cédula ya existe
+    const { data: existingCedula } = await supabase
+      .from('usuario')
+      .select('id')
+      .eq('cedula', createUsuarioDto.cedula)
+      .single();
+
+    if (existingCedula) {
+      throw new ConflictException('Ya existe un estudiante con esa cédula');
+    }
+
     // Verificar si el correo ya existe
-    const { data: existingUser } = await supabase
+    const { data: existingCorreo } = await supabase
       .from('usuario')
       .select('id')
       .eq('correo', createUsuarioDto.correo)
       .single();
 
-    if (existingUser) {
-      throw new ConflictException('El correo electrónico ya está registrado');
+    if (existingCorreo) {
+      throw new ConflictException('Ya existe un estudiante con ese correo electrónico');
     }
 
     const { data, error } = await supabase
@@ -33,7 +44,7 @@ export class UsuariosService {
       .single();
 
     if (error) {
-      throw new BadRequestException(`Error al crear usuario: ${error.message}`);
+      throw new BadRequestException(`Error al crear estudiante: ${error.message}`);
     }
 
     return data;
@@ -48,7 +59,7 @@ export class UsuariosService {
       .order('id', { ascending: true });
 
     if (error) {
-      throw new BadRequestException(`Error al obtener usuarios: ${error.message}`);
+      throw new BadRequestException(`Error al obtener estudiantes: ${error.message}`);
     }
 
     return data;
@@ -64,7 +75,7 @@ export class UsuariosService {
       .single();
 
     if (error || !data) {
-      throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
+      throw new NotFoundException(`Estudiante con ID ${id} no encontrado`);
     }
 
     return data;
@@ -76,17 +87,31 @@ export class UsuariosService {
     // Verificar si el usuario existe
     await this.findOne(id);
 
+    // Si se actualiza la cédula, verificar que no esté en uso
+    if (updateUsuarioDto.cedula) {
+      const { data: existingCedula } = await supabase
+        .from('usuario')
+        .select('id')
+        .eq('cedula', updateUsuarioDto.cedula)
+        .neq('id', id)
+        .single();
+
+      if (existingCedula) {
+        throw new ConflictException('Ya existe un estudiante con esa cédula');
+      }
+    }
+
     // Si se actualiza el correo, verificar que no esté en uso
     if (updateUsuarioDto.correo) {
-      const { data: existingUser } = await supabase
+      const { data: existingCorreo } = await supabase
         .from('usuario')
         .select('id')
         .eq('correo', updateUsuarioDto.correo)
         .neq('id', id)
         .single();
 
-      if (existingUser) {
-        throw new ConflictException('El correo electrónico ya está registrado');
+      if (existingCorreo) {
+        throw new ConflictException('Ya existe un estudiante con ese correo electrónico');
       }
     }
 
@@ -98,7 +123,7 @@ export class UsuariosService {
       .single();
 
     if (error) {
-      throw new BadRequestException(`Error al actualizar usuario: ${error.message}`);
+      throw new BadRequestException(`Error al actualizar estudiante: ${error.message}`);
     }
 
     return data;
@@ -119,17 +144,17 @@ export class UsuariosService {
 
     if (horarios && horarios.length > 0) {
       throw new ConflictException(
-        'No se puede eliminar el usuario porque tiene horarios asociados',
+        'No se puede eliminar el estudiante porque tiene horarios asociados',
       );
     }
 
     const { error } = await supabase.from('usuario').delete().eq('id', id);
 
     if (error) {
-      throw new BadRequestException(`Error al eliminar usuario: ${error.message}`);
+      throw new BadRequestException(`Error al eliminar estudiante: ${error.message}`);
     }
 
-    return { message: 'Usuario eliminado correctamente' };
+    return { message: 'Estudiante eliminado correctamente' };
   }
 }
 
