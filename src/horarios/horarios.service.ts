@@ -4,7 +4,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { SupabaseService } from '../supabase/supabase.service';
+import { MysqlService } from '../mysql/mysql.service';
 import { CreateHorarioDto } from './dto/create-horario.dto';
 import { UpdateHorarioDto } from './dto/update-horario.dto';
 import { UsuariosService } from '../usuarios/usuarios.service';
@@ -13,7 +13,7 @@ import { AsignaturasService } from '../asignaturas/asignaturas.service';
 @Injectable()
 export class HorariosService {
   constructor(
-    private supabaseService: SupabaseService,
+    private mysqlService: MysqlService,
     private usuariosService: UsuariosService,
     private asignaturasService: AsignaturasService,
   ) {}
@@ -59,21 +59,18 @@ export class HorariosService {
     excludeHorarioId?: number,
   ) {
     const asignatura = await this.asignaturasService.findOne(idAsignatura);
-    const supabase = this.supabaseService.getClient();
 
     // Contar horarios de esta asignatura para este usuario en la semana
-    let query = supabase
-      .from('schedules')
-      .select('id', { count: 'exact' })
-      .eq('id_asignatura', idAsignatura)
-      .eq('id_usuario', idUsuario);
+    let query = 'SELECT COUNT(*) as count FROM schedules WHERE id_asignatura = ? AND id_usuario = ?';
+    const params: any[] = [idAsignatura, idUsuario];
 
     if (excludeHorarioId) {
-      query = query.neq('id', excludeHorarioId);
+      query += ' AND id != ?';
+      params.push(excludeHorarioId);
     }
 
-    const { count } = await query;
-    const totalHorarios = count || 0;
+    const result = await this.mysqlService.queryOne(query, params);
+    const totalHorarios = result?.count || 0;
 
     // Si estamos creando un nuevo horario (no excluyendo ninguno), sumar 1
     const totalConNuevo = excludeHorarioId ? totalHorarios : totalHorarios + 1;
@@ -86,8 +83,6 @@ export class HorariosService {
   }
 
   async create(createHorarioDto: CreateHorarioDto) {
-    const supabase = this.supabaseService.getClient();
-
     // Validar que el usuario existe
     await this.usuariosService.findOne(createHorarioDto.id_usuario);
 
@@ -104,17 +99,16 @@ export class HorariosService {
     );
 
     // Verificar solapamiento de horarios
-    const { data: horariosMismoDia } = await supabase
-      .from('schedules')
-      .select(`
-        *,
-        asignatura:asignatura(*)
-      `)
-      .eq('id_usuario', createHorarioDto.id_usuario)
-      .eq('dia', createHorarioDto.dia);
+    const horariosMismoDia = await this.mysqlService.query(
+      `SELECT s.*, a.nombre as asignatura_nombre 
+       FROM schedules s 
+       LEFT JOIN asignatura a ON s.id_asignatura = a.id 
+       WHERE s.id_usuario = ? AND s.dia = ?`,
+      [createHorarioDto.id_usuario, createHorarioDto.dia],
+    );
 
-    if (horariosMismoDia) {
-      const tieneSolapamiento = horariosMismoDia.some((horario) =>
+    if (horariosMismoDia && horariosMismoDia.length > 0) {
+      const tieneSolapamiento = horariosMismoDia.some((horario: any) =>
         this.checkTimeOverlap(
           createHorarioDto.hora_inicio,
           createHorarioDto.hora_fin,
@@ -124,7 +118,7 @@ export class HorariosService {
       );
 
       if (tieneSolapamiento) {
-        const horarioConflicto = horariosMismoDia.find((horario) =>
+        const horarioConflicto = horariosMismoDia.find((horario: any) =>
           this.checkTimeOverlap(
             createHorarioDto.hora_inicio,
             createHorarioDto.hora_fin,
@@ -133,13 +127,16 @@ export class HorariosService {
           ),
         );
         
+        const horaInicioStr = horarioConflicto?.hora_inicio?.substring(0, 5) || '';
+        const horaFinStr = horarioConflicto?.hora_fin?.substring(0, 5) || '';
+        
         throw new ConflictException(
-          `El horario se cruza con ${horarioConflicto?.asignatura?.nombre || 'otra asignatura'} (${horarioConflicto?.hora_inicio.substring(0, 5)} - ${horarioConflicto?.hora_fin.substring(0, 5)})`,
+          `El horario se cruza con ${horarioConflicto?.asignatura_nombre || 'otra asignatura'} (${horaInicioStr} - ${horaFinStr})`,
         );
       }
     }
 
-    // Normalizar formato de hora para PostgreSQL (HH:MM:SS)
+    // Normalizar formato de hora para MySQL (HH:MM:SS)
     const normalizarHora = (hora: string): string => {
       if (!hora) return hora;
       // Remover espacios en blanco
@@ -170,98 +167,155 @@ export class HorariosService {
     validarRangoHora(createHorarioDto.hora_inicio, 'hora_inicio');
     validarRangoHora(createHorarioDto.hora_fin, 'hora_fin');
 
-    const horarioNormalizado = {
-      ...createHorarioDto,
-      hora_inicio: normalizarHora(createHorarioDto.hora_inicio),
-      hora_fin: normalizarHora(createHorarioDto.hora_fin),
-    };
+    const horaInicioNormalizada = normalizarHora(createHorarioDto.hora_inicio);
+    const horaFinNormalizada = normalizarHora(createHorarioDto.hora_fin);
 
-    const { data, error } = await supabase
-      .from('schedules')
-      .insert([horarioNormalizado])
-      .select(`
-        *,
-        usuario:usuario(*),
-        asignatura:asignatura(*)
-      `)
-      .single();
+    const result = await this.mysqlService.execute(
+      'INSERT INTO schedules (dia, hora_inicio, hora_fin, id_usuario, id_asignatura) VALUES (?, ?, ?, ?, ?)',
+      [
+        createHorarioDto.dia,
+        horaInicioNormalizada,
+        horaFinNormalizada,
+        createHorarioDto.id_usuario,
+        createHorarioDto.id_asignatura,
+      ],
+    );
 
-    if (error) {
-      throw new BadRequestException(`Error al crear horario: ${error.message}`);
-    }
-
-    return data;
+    const newHorario = await this.findOne((result as any).insertId);
+    return newHorario;
   }
 
   async findAll() {
-    const supabase = this.supabaseService.getClient();
+    const horarios = await this.mysqlService.query(
+      `SELECT s.*, 
+              u.id as usuario_id, u.cedula as usuario_cedula, u.nombre as usuario_nombre, 
+              u.correo as usuario_correo, u.telefono as usuario_telefono, u.rol as usuario_rol,
+              a.id as asignatura_id, a.nombre as asignatura_nombre, a.descripcion as asignatura_descripcion, 
+              a.maxclasessemana as asignatura_maxclasessemana
+       FROM schedules s
+       LEFT JOIN usuario u ON s.id_usuario = u.id
+       LEFT JOIN asignatura a ON s.id_asignatura = a.id
+       ORDER BY s.dia ASC, s.hora_inicio ASC`,
+    );
 
-    const { data, error } = await supabase
-      .from('schedules')
-      .select(`
-        *,
-        usuario:usuario(*),
-        asignatura:asignatura(*)
-      `)
-      .order('dia', { ascending: true })
-      .order('hora_inicio', { ascending: true });
-
-    if (error) {
-      throw new BadRequestException(`Error al obtener horarios: ${error.message}`);
-    }
-
-    return data;
+    // Formatear la respuesta para que coincida con el formato anterior
+    return horarios.map((h: any) => ({
+      id: h.id,
+      dia: h.dia,
+      hora_inicio: h.hora_inicio,
+      hora_fin: h.hora_fin,
+      id_usuario: h.id_usuario,
+      id_asignatura: h.id_asignatura,
+      created_at: h.created_at,
+      updated_at: h.updated_at,
+      usuario: h.usuario_id ? {
+        id: h.usuario_id,
+        cedula: h.usuario_cedula,
+        nombre: h.usuario_nombre,
+        correo: h.usuario_correo,
+        telefono: h.usuario_telefono,
+        rol: h.usuario_rol,
+      } : null,
+      asignatura: h.asignatura_id ? {
+        id: h.asignatura_id,
+        nombre: h.asignatura_nombre,
+        descripcion: h.asignatura_descripcion,
+        maxclasessemana: h.asignatura_maxclasessemana,
+      } : null,
+    }));
   }
 
   async findOne(id: number) {
-    const supabase = this.supabaseService.getClient();
+    const horario = await this.mysqlService.queryOne(
+      `SELECT s.*, 
+              u.id as usuario_id, u.cedula as usuario_cedula, u.nombre as usuario_nombre, 
+              u.correo as usuario_correo, u.telefono as usuario_telefono, u.rol as usuario_rol,
+              a.id as asignatura_id, a.nombre as asignatura_nombre, a.descripcion as asignatura_descripcion, 
+              a.maxclasessemana as asignatura_maxclasessemana
+       FROM schedules s
+       LEFT JOIN usuario u ON s.id_usuario = u.id
+       LEFT JOIN asignatura a ON s.id_asignatura = a.id
+       WHERE s.id = ?`,
+      [id],
+    );
 
-    const { data, error } = await supabase
-      .from('schedules')
-      .select(`
-        *,
-        usuario:usuario(*),
-        asignatura:asignatura(*)
-      `)
-      .eq('id', id)
-      .single();
-
-    if (error || !data) {
+    if (!horario) {
       throw new NotFoundException(`Horario con ID ${id} no encontrado`);
     }
 
-    return data;
+    // Formatear la respuesta
+    return {
+      id: horario.id,
+      dia: horario.dia,
+      hora_inicio: horario.hora_inicio,
+      hora_fin: horario.hora_fin,
+      id_usuario: horario.id_usuario,
+      id_asignatura: horario.id_asignatura,
+      created_at: horario.created_at,
+      updated_at: horario.updated_at,
+      usuario: horario.usuario_id ? {
+        id: horario.usuario_id,
+        cedula: horario.usuario_cedula,
+        nombre: horario.usuario_nombre,
+        correo: horario.usuario_correo,
+        telefono: horario.usuario_telefono,
+        rol: horario.usuario_rol,
+      } : null,
+      asignatura: horario.asignatura_id ? {
+        id: horario.asignatura_id,
+        nombre: horario.asignatura_nombre,
+        descripcion: horario.asignatura_descripcion,
+        maxclasessemana: horario.asignatura_maxclasessemana,
+      } : null,
+    };
   }
 
   async findByUsuario(idUsuario: number) {
-    const supabase = this.supabaseService.getClient();
-
     // Verificar que el usuario existe
     await this.usuariosService.findOne(idUsuario);
 
-    const { data, error } = await supabase
-      .from('schedules')
-      .select(`
-        *,
-        usuario:usuario(*),
-        asignatura:asignatura(*)
-      `)
-      .eq('id_usuario', idUsuario)
-      .order('dia', { ascending: true })
-      .order('hora_inicio', { ascending: true });
+    const horarios = await this.mysqlService.query(
+      `SELECT s.*, 
+              u.id as usuario_id, u.cedula as usuario_cedula, u.nombre as usuario_nombre, 
+              u.correo as usuario_correo, u.telefono as usuario_telefono, u.rol as usuario_rol,
+              a.id as asignatura_id, a.nombre as asignatura_nombre, a.descripcion as asignatura_descripcion, 
+              a.maxclasessemana as asignatura_maxclasessemana
+       FROM schedules s
+       LEFT JOIN usuario u ON s.id_usuario = u.id
+       LEFT JOIN asignatura a ON s.id_asignatura = a.id
+       WHERE s.id_usuario = ?
+       ORDER BY s.dia ASC, s.hora_inicio ASC`,
+      [idUsuario],
+    );
 
-    if (error) {
-      throw new BadRequestException(
-        `Error al obtener horarios del usuario: ${error.message}`,
-      );
-    }
-
-    return data;
+    // Formatear la respuesta
+    return horarios.map((h: any) => ({
+      id: h.id,
+      dia: h.dia,
+      hora_inicio: h.hora_inicio,
+      hora_fin: h.hora_fin,
+      id_usuario: h.id_usuario,
+      id_asignatura: h.id_asignatura,
+      created_at: h.created_at,
+      updated_at: h.updated_at,
+      usuario: h.usuario_id ? {
+        id: h.usuario_id,
+        cedula: h.usuario_cedula,
+        nombre: h.usuario_nombre,
+        correo: h.usuario_correo,
+        telefono: h.usuario_telefono,
+        rol: h.usuario_rol,
+      } : null,
+      asignatura: h.asignatura_id ? {
+        id: h.asignatura_id,
+        nombre: h.asignatura_nombre,
+        descripcion: h.asignatura_descripcion,
+        maxclasessemana: h.asignatura_maxclasessemana,
+      } : null,
+    }));
   }
 
   async update(id: number, updateHorarioDto: UpdateHorarioDto) {
-    const supabase = this.supabaseService.getClient();
-
     // Verificar que el horario existe
     const horarioActual = await this.findOne(id);
 
@@ -297,18 +351,16 @@ export class HorariosService {
 
     // Verificar solapamiento de horarios (excluyendo el actual)
     if (updateHorarioDto.hora_inicio || updateHorarioDto.hora_fin || updateHorarioDto.dia) {
-      const { data: horariosMismoDia } = await supabase
-        .from('schedules')
-        .select(`
-          *,
-          asignatura:asignatura(*)
-        `)
-        .eq('id_usuario', idUsuario)
-        .eq('dia', dia)
-        .neq('id', id);
+      const horariosMismoDia = await this.mysqlService.query(
+        `SELECT s.*, a.nombre as asignatura_nombre 
+         FROM schedules s 
+         LEFT JOIN asignatura a ON s.id_asignatura = a.id 
+         WHERE s.id_usuario = ? AND s.dia = ? AND s.id != ?`,
+        [idUsuario, dia, id],
+      );
 
-      if (horariosMismoDia) {
-        const tieneSolapamiento = horariosMismoDia.some((horario) =>
+      if (horariosMismoDia && horariosMismoDia.length > 0) {
+        const tieneSolapamiento = horariosMismoDia.some((horario: any) =>
           this.checkTimeOverlap(
             horaInicio,
             horaFin,
@@ -318,7 +370,7 @@ export class HorariosService {
         );
 
         if (tieneSolapamiento) {
-          const horarioConflicto = horariosMismoDia.find((horario) =>
+          const horarioConflicto = horariosMismoDia.find((horario: any) =>
             this.checkTimeOverlap(
               horaInicio,
               horaFin,
@@ -327,14 +379,17 @@ export class HorariosService {
             ),
           );
           
+          const horaInicioStr = horarioConflicto?.hora_inicio?.substring(0, 5) || '';
+          const horaFinStr = horarioConflicto?.hora_fin?.substring(0, 5) || '';
+          
           throw new ConflictException(
-            `El horario se cruza con ${horarioConflicto?.asignatura?.nombre || 'otra asignatura'} (${horarioConflicto?.hora_inicio.substring(0, 5)} - ${horarioConflicto?.hora_fin.substring(0, 5)})`,
+            `El horario se cruza con ${horarioConflicto?.asignatura_nombre || 'otra asignatura'} (${horaInicioStr} - ${horaFinStr})`,
           );
         }
       }
     }
 
-    // Normalizar formato de hora para PostgreSQL si se están actualizando
+    // Normalizar formato de hora para MySQL si se están actualizando
     const normalizarHora = (hora: string): string => {
       if (!hora) return hora;
       hora = hora.trim();
@@ -347,58 +402,61 @@ export class HorariosService {
       return hora;
     };
 
-    const horarioActualizado: any = { ...updateHorarioDto };
-    
-    // Normalizar y validar horas si se están actualizando
-    if (horarioActualizado.hora_inicio) {
-      horarioActualizado.hora_inicio = normalizarHora(horarioActualizado.hora_inicio);
-      const [horas, minutos] = horarioActualizado.hora_inicio.split(':').map(Number);
+    // Construir query de actualización dinámicamente
+    const fields: string[] = [];
+    const values: any[] = [];
+
+    if (updateHorarioDto.dia !== undefined) {
+      fields.push('dia = ?');
+      values.push(updateHorarioDto.dia);
+    }
+    if (updateHorarioDto.hora_inicio !== undefined) {
+      const horaNormalizada = normalizarHora(updateHorarioDto.hora_inicio);
+      const [horas, minutos] = horaNormalizada.split(':').map(Number);
       if (horas < 6 || horas > 22 || (horas === 22 && minutos > 0)) {
         throw new BadRequestException(
           `hora_inicio debe estar entre 06:00 y 22:00. Valor recibido: ${updateHorarioDto.hora_inicio}`
         );
       }
+      fields.push('hora_inicio = ?');
+      values.push(horaNormalizada);
     }
-    
-    if (horarioActualizado.hora_fin) {
-      horarioActualizado.hora_fin = normalizarHora(horarioActualizado.hora_fin);
-      const [horas, minutos] = horarioActualizado.hora_fin.split(':').map(Number);
+    if (updateHorarioDto.hora_fin !== undefined) {
+      const horaNormalizada = normalizarHora(updateHorarioDto.hora_fin);
+      const [horas, minutos] = horaNormalizada.split(':').map(Number);
       if (horas < 6 || horas > 22 || (horas === 22 && minutos > 0)) {
         throw new BadRequestException(
           `hora_fin debe estar entre 06:00 y 22:00. Valor recibido: ${updateHorarioDto.hora_fin}`
         );
       }
+      fields.push('hora_fin = ?');
+      values.push(horaNormalizada);
+    }
+    if (updateHorarioDto.id_usuario !== undefined) {
+      fields.push('id_usuario = ?');
+      values.push(updateHorarioDto.id_usuario);
+    }
+    if (updateHorarioDto.id_asignatura !== undefined) {
+      fields.push('id_asignatura = ?');
+      values.push(updateHorarioDto.id_asignatura);
     }
 
-    const { data, error } = await supabase
-      .from('schedules')
-      .update(horarioActualizado)
-      .eq('id', id)
-      .select(`
-        *,
-        usuario:usuario(*),
-        asignatura:asignatura(*)
-      `)
-      .single();
-
-    if (error) {
-      throw new BadRequestException(`Error al actualizar horario: ${error.message}`);
+    if (fields.length > 0) {
+      values.push(id);
+      await this.mysqlService.execute(
+        `UPDATE schedules SET ${fields.join(', ')} WHERE id = ?`,
+        values,
+      );
     }
 
-    return data;
+    return await this.findOne(id);
   }
 
   async remove(id: number) {
-    const supabase = this.supabaseService.getClient();
-
     // Verificar que el horario existe
     await this.findOne(id);
 
-    const { error } = await supabase.from('schedules').delete().eq('id', id);
-
-    if (error) {
-      throw new BadRequestException(`Error al eliminar horario: ${error.message}`);
-    }
+    await this.mysqlService.execute('DELETE FROM schedules WHERE id = ?', [id]);
 
     return { message: 'Horario eliminado correctamente' };
   }

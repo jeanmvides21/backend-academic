@@ -4,118 +4,113 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import { SupabaseService } from '../supabase/supabase.service';
+import { MysqlService } from '../mysql/mysql.service';
 import { CreateAsignaturaDto } from './dto/create-asignatura.dto';
 import { UpdateAsignaturaDto } from './dto/update-asignatura.dto';
 
 @Injectable()
 export class AsignaturasService {
-  constructor(private supabaseService: SupabaseService) {}
+  constructor(private mysqlService: MysqlService) {}
 
   async create(createAsignaturaDto: CreateAsignaturaDto) {
-    const supabase = this.supabaseService.getClient();
-
     // Verificar si el nombre ya existe
-    const { data: existingAsignatura } = await supabase
-      .from('asignatura')
-      .select('id')
-      .eq('nombre', createAsignaturaDto.nombre)
-      .single();
+    const existingAsignatura = await this.mysqlService.queryOne(
+      'SELECT id FROM asignatura WHERE nombre = ?',
+      [createAsignaturaDto.nombre],
+    );
 
     if (existingAsignatura) {
       throw new ConflictException('Ya existe una asignatura con ese nombre');
     }
 
-    const { data, error } = await supabase
-      .from('asignatura')
-      .insert([createAsignaturaDto])
-      .select()
-      .single();
+    const result = await this.mysqlService.execute(
+      'INSERT INTO asignatura (nombre, descripcion, maxclasessemana) VALUES (?, ?, ?)',
+      [
+        createAsignaturaDto.nombre,
+        createAsignaturaDto.descripcion || null,
+        createAsignaturaDto.maxclasessemana || 1,
+      ],
+    );
 
-    if (error) {
-      throw new BadRequestException(`Error al crear asignatura: ${error.message}`);
-    }
-
-    return data;
+    const newAsignatura = await this.findOne((result as any).insertId);
+    return newAsignatura;
   }
 
   async findAll() {
-    const supabase = this.supabaseService.getClient();
-
-    const { data, error } = await supabase
-      .from('asignatura')
-      .select('*')
-      .order('id', { ascending: true });
-
-    if (error) {
-      throw new BadRequestException(`Error al obtener asignaturas: ${error.message}`);
-    }
-
-    return data;
+    const asignaturas = await this.mysqlService.query(
+      'SELECT * FROM asignatura ORDER BY id ASC',
+    );
+    return asignaturas;
   }
 
   async findOne(id: number) {
-    const supabase = this.supabaseService.getClient();
+    const asignatura = await this.mysqlService.queryOne(
+      'SELECT * FROM asignatura WHERE id = ?',
+      [id],
+    );
 
-    const { data, error } = await supabase
-      .from('asignatura')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (error || !data) {
+    if (!asignatura) {
       throw new NotFoundException(`Asignatura con ID ${id} no encontrada`);
     }
 
-    return data;
+    return asignatura;
   }
 
   async update(id: number, updateAsignaturaDto: UpdateAsignaturaDto) {
-    const supabase = this.supabaseService.getClient();
-
     // Verificar si la asignatura existe
     await this.findOne(id);
 
     // Si se actualiza el nombre, verificar que no esté en uso
     if (updateAsignaturaDto.nombre) {
-      const { data: existingAsignatura } = await supabase
-        .from('asignatura')
-        .select('id')
-        .eq('nombre', updateAsignaturaDto.nombre)
-        .neq('id', id)
-        .single();
+      const existingAsignatura = await this.mysqlService.queryOne(
+        'SELECT id FROM asignatura WHERE nombre = ? AND id != ?',
+        [updateAsignaturaDto.nombre, id],
+      );
 
       if (existingAsignatura) {
         throw new ConflictException('Ya existe una asignatura con ese nombre');
       }
     }
 
-    const { data, error } = await supabase
-      .from('asignatura')
-      .update(updateAsignaturaDto)
-      .eq('id', id)
-      .select()
-      .single();
+    // Construir query de actualización dinámicamente
+    const fields: string[] = [];
+    const values: any[] = [];
 
-    if (error) {
-      throw new BadRequestException(`Error al actualizar asignatura: ${error.message}`);
+    if (updateAsignaturaDto.nombre !== undefined) {
+      fields.push('nombre = ?');
+      values.push(updateAsignaturaDto.nombre);
+    }
+    if (updateAsignaturaDto.descripcion !== undefined) {
+      fields.push('descripcion = ?');
+      values.push(updateAsignaturaDto.descripcion);
+    }
+    if (updateAsignaturaDto.maxclasessemana !== undefined) {
+      fields.push('maxclasessemana = ?');
+      values.push(updateAsignaturaDto.maxclasessemana);
     }
 
-    return data;
+    if (fields.length === 0) {
+      return await this.findOne(id);
+    }
+
+    values.push(id);
+    await this.mysqlService.execute(
+      `UPDATE asignatura SET ${fields.join(', ')} WHERE id = ?`,
+      values,
+    );
+
+    return await this.findOne(id);
   }
 
   async remove(id: number) {
-    const supabase = this.supabaseService.getClient();
-
     // Verificar si la asignatura existe
     await this.findOne(id);
 
     // Verificar si tiene horarios asociados
-    const { data: horarios } = await supabase
-      .from('schedules')
-      .select('id')
-      .eq('id_asignatura', id)
-      .limit(1);
+    const horarios = await this.mysqlService.query(
+      'SELECT id FROM schedules WHERE id_asignatura = ? LIMIT 1',
+      [id],
+    );
 
     if (horarios && horarios.length > 0) {
       throw new ConflictException(
@@ -123,11 +118,7 @@ export class AsignaturasService {
       );
     }
 
-    const { error } = await supabase.from('asignatura').delete().eq('id', id);
-
-    if (error) {
-      throw new BadRequestException(`Error al eliminar asignatura: ${error.message}`);
-    }
+    await this.mysqlService.execute('DELETE FROM asignatura WHERE id = ?', [id]);
 
     return { message: 'Asignatura eliminada correctamente' };
   }

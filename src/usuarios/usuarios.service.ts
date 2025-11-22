@@ -4,97 +4,81 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import { SupabaseService } from '../supabase/supabase.service';
+import { MysqlService } from '../mysql/mysql.service';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
 
 @Injectable()
 export class UsuariosService {
-  constructor(private supabaseService: SupabaseService) {}
+  constructor(private mysqlService: MysqlService) {}
 
   async create(createUsuarioDto: CreateUsuarioDto) {
-    const supabase = this.supabaseService.getClient();
-
     // Verificar si la cédula ya existe
-    const { data: existingCedula } = await supabase
-      .from('usuario')
-      .select('id')
-      .eq('cedula', createUsuarioDto.cedula)
-      .single();
+    const existingCedula = await this.mysqlService.queryOne(
+      'SELECT id FROM usuario WHERE cedula = ?',
+      [createUsuarioDto.cedula],
+    );
 
     if (existingCedula) {
       throw new ConflictException('Ya existe un estudiante con esa cédula');
     }
 
     // Verificar si el correo ya existe
-    const { data: existingCorreo } = await supabase
-      .from('usuario')
-      .select('id')
-      .eq('correo', createUsuarioDto.correo)
-      .single();
+    const existingCorreo = await this.mysqlService.queryOne(
+      'SELECT id FROM usuario WHERE correo = ?',
+      [createUsuarioDto.correo],
+    );
 
     if (existingCorreo) {
       throw new ConflictException('Ya existe un estudiante con ese correo electrónico');
     }
 
-    const { data, error } = await supabase
-      .from('usuario')
-      .insert([createUsuarioDto])
-      .select()
-      .single();
+    const result = await this.mysqlService.execute(
+      'INSERT INTO usuario (cedula, nombre, correo, telefono, rol, password) VALUES (?, ?, ?, ?, ?, ?)',
+      [
+        createUsuarioDto.cedula,
+        createUsuarioDto.nombre,
+        createUsuarioDto.correo,
+        createUsuarioDto.telefono,
+        createUsuarioDto.rol || 'estudiante',
+        createUsuarioDto.password,
+      ],
+    );
 
-    if (error) {
-      throw new BadRequestException(`Error al crear estudiante: ${error.message}`);
-    }
-
-    return data;
+    const newUsuario = await this.findOne((result as any).insertId);
+    return newUsuario;
   }
 
   async findAll() {
-    const supabase = this.supabaseService.getClient();
-
-    const { data, error } = await supabase
-      .from('usuario')
-      .select('*')
-      .order('id', { ascending: true });
-
-    if (error) {
-      throw new BadRequestException(`Error al obtener estudiantes: ${error.message}`);
-    }
-
-    return data;
+    const usuarios = await this.mysqlService.query(
+      'SELECT * FROM usuario ORDER BY id ASC',
+    );
+    return usuarios;
   }
 
   async findOne(id: number) {
-    const supabase = this.supabaseService.getClient();
+    const usuario = await this.mysqlService.queryOne(
+      'SELECT * FROM usuario WHERE id = ?',
+      [id],
+    );
 
-    const { data, error } = await supabase
-      .from('usuario')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (error || !data) {
+    if (!usuario) {
       throw new NotFoundException(`Estudiante con ID ${id} no encontrado`);
     }
 
-    return data;
+    return usuario;
   }
 
   async update(id: number, updateUsuarioDto: UpdateUsuarioDto) {
-    const supabase = this.supabaseService.getClient();
-
     // Verificar si el usuario existe
     await this.findOne(id);
 
     // Si se actualiza la cédula, verificar que no esté en uso
     if (updateUsuarioDto.cedula) {
-      const { data: existingCedula } = await supabase
-        .from('usuario')
-        .select('id')
-        .eq('cedula', updateUsuarioDto.cedula)
-        .neq('id', id)
-        .single();
+      const existingCedula = await this.mysqlService.queryOne(
+        'SELECT id FROM usuario WHERE cedula = ? AND id != ?',
+        [updateUsuarioDto.cedula, id],
+      );
 
       if (existingCedula) {
         throw new ConflictException('Ya existe un estudiante con esa cédula');
@@ -103,44 +87,67 @@ export class UsuariosService {
 
     // Si se actualiza el correo, verificar que no esté en uso
     if (updateUsuarioDto.correo) {
-      const { data: existingCorreo } = await supabase
-        .from('usuario')
-        .select('id')
-        .eq('correo', updateUsuarioDto.correo)
-        .neq('id', id)
-        .single();
+      const existingCorreo = await this.mysqlService.queryOne(
+        'SELECT id FROM usuario WHERE correo = ? AND id != ?',
+        [updateUsuarioDto.correo, id],
+      );
 
       if (existingCorreo) {
         throw new ConflictException('Ya existe un estudiante con ese correo electrónico');
       }
     }
 
-    const { data, error } = await supabase
-      .from('usuario')
-      .update(updateUsuarioDto)
-      .eq('id', id)
-      .select()
-      .single();
+    // Construir query de actualización dinámicamente
+    const fields: string[] = [];
+    const values: any[] = [];
 
-    if (error) {
-      throw new BadRequestException(`Error al actualizar estudiante: ${error.message}`);
+    if (updateUsuarioDto.cedula !== undefined) {
+      fields.push('cedula = ?');
+      values.push(updateUsuarioDto.cedula);
+    }
+    if (updateUsuarioDto.nombre !== undefined) {
+      fields.push('nombre = ?');
+      values.push(updateUsuarioDto.nombre);
+    }
+    if (updateUsuarioDto.correo !== undefined) {
+      fields.push('correo = ?');
+      values.push(updateUsuarioDto.correo);
+    }
+    if (updateUsuarioDto.telefono !== undefined) {
+      fields.push('telefono = ?');
+      values.push(updateUsuarioDto.telefono);
+    }
+    if (updateUsuarioDto.rol !== undefined) {
+      fields.push('rol = ?');
+      values.push(updateUsuarioDto.rol);
+    }
+    if (updateUsuarioDto.password !== undefined) {
+      fields.push('password = ?');
+      values.push(updateUsuarioDto.password);
     }
 
-    return data;
+    if (fields.length === 0) {
+      return await this.findOne(id);
+    }
+
+    values.push(id);
+    await this.mysqlService.execute(
+      `UPDATE usuario SET ${fields.join(', ')} WHERE id = ?`,
+      values,
+    );
+
+    return await this.findOne(id);
   }
 
   async remove(id: number) {
-    const supabase = this.supabaseService.getClient();
-
     // Verificar si el usuario existe
     await this.findOne(id);
 
     // Verificar si tiene horarios asociados
-    const { data: horarios } = await supabase
-      .from('schedules')
-      .select('id')
-      .eq('id_usuario', id)
-      .limit(1);
+    const horarios = await this.mysqlService.query(
+      'SELECT id FROM schedules WHERE id_usuario = ? LIMIT 1',
+      [id],
+    );
 
     if (horarios && horarios.length > 0) {
       throw new ConflictException(
@@ -148,11 +155,7 @@ export class UsuariosService {
       );
     }
 
-    const { error } = await supabase.from('usuario').delete().eq('id', id);
-
-    if (error) {
-      throw new BadRequestException(`Error al eliminar estudiante: ${error.message}`);
-    }
+    await this.mysqlService.execute('DELETE FROM usuario WHERE id = ?', [id]);
 
     return { message: 'Estudiante eliminado correctamente' };
   }

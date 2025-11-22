@@ -1,109 +1,75 @@
 -- =====================================================
--- Sistema de Gestión Académica - Base de Datos
+-- Sistema de Gestión Académica - Base de Datos MySQL
 -- =====================================================
--- PostgreSQL 15+
+-- MySQL 8.0+
 -- Script completo para creación de tablas y datos de prueba
 -- =====================================================
 
--- Eliminar tablas existentes (si existen)
-DROP TABLE IF EXISTS schedules CASCADE;
-DROP TABLE IF EXISTS asignatura CASCADE;
-DROP TABLE IF EXISTS usuario CASCADE;
+-- Crear base de datos si no existe
+CREATE DATABASE IF NOT EXISTS gestion_academica;
+USE gestion_academica;
 
--- Eliminar función si existe
-DROP FUNCTION IF EXISTS update_updated_at_column() CASCADE;
-
--- =====================================================
--- FUNCIONES
--- =====================================================
-
--- Función para actualizar automáticamente updated_at
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+-- Eliminar tablas existentes (si existen) en orden correcto
+DROP TABLE IF EXISTS schedules;
+DROP TABLE IF EXISTS asignatura;
+DROP TABLE IF EXISTS usuario;
 
 -- =====================================================
 -- TABLA: usuario (estudiantes y administradores)
 -- =====================================================
 
 CREATE TABLE usuario (
-    id SERIAL PRIMARY KEY,
+    id INT AUTO_INCREMENT PRIMARY KEY,
     cedula VARCHAR(50) NOT NULL UNIQUE,
     nombre VARCHAR(100) NOT NULL,
     correo VARCHAR(255) NOT NULL UNIQUE,
     telefono VARCHAR(20) NOT NULL,
     rol VARCHAR(20) NOT NULL DEFAULT 'estudiante',
     password VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
     -- Constraints
     CONSTRAINT check_rol CHECK (rol IN ('admin', 'estudiante'))
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Índices para mejorar rendimiento
 CREATE INDEX idx_usuario_cedula ON usuario(cedula);
 CREATE INDEX idx_usuario_correo ON usuario(correo);
 CREATE INDEX idx_usuario_rol ON usuario(rol);
 
--- Trigger para actualizar updated_at
-CREATE TRIGGER update_usuario_updated_at
-    BEFORE UPDATE ON usuario
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
-
--- Comentarios de tabla
-COMMENT ON TABLE usuario IS 'Tabla de usuarios del sistema (estudiantes y administradores)';
-COMMENT ON COLUMN usuario.cedula IS 'Cédula o identificación única del usuario';
-COMMENT ON COLUMN usuario.rol IS 'Rol del usuario: admin o estudiante';
-COMMENT ON COLUMN usuario.password IS 'Contraseña del usuario (sin encriptar para simplicidad académica)';
-
 -- =====================================================
 -- TABLA: asignatura
 -- =====================================================
 
 CREATE TABLE asignatura (
-    id SERIAL PRIMARY KEY,
+    id INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL UNIQUE,
     descripcion TEXT,
-    maxclasessemana INTEGER NOT NULL DEFAULT 1,
-    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+    maxclasessemana INT NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
     -- Constraints
     CONSTRAINT check_maxclases CHECK (maxclasessemana >= 1 AND maxclasessemana <= 10)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Índices
 CREATE INDEX idx_asignatura_nombre ON asignatura(nombre);
-
--- Trigger para actualizar updated_at
-CREATE TRIGGER update_asignatura_updated_at
-    BEFORE UPDATE ON asignatura
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
-
--- Comentarios
-COMMENT ON TABLE asignatura IS 'Tabla de asignaturas del sistema académico';
-COMMENT ON COLUMN asignatura.maxclasessemana IS 'Máximo de clases permitidas por semana para esta asignatura';
 
 -- =====================================================
 -- TABLA: schedules (horarios)
 -- =====================================================
 
 CREATE TABLE schedules (
-    id SERIAL PRIMARY KEY,
-    dia TEXT NOT NULL,
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    dia VARCHAR(20) NOT NULL,
     hora_inicio TIME NOT NULL,
     hora_fin TIME NOT NULL,
-    id_usuario INTEGER NOT NULL,
-    id_asignatura INTEGER NOT NULL,
-    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+    id_usuario INT NOT NULL,
+    id_asignatura INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
     -- Foreign Keys
     CONSTRAINT fk_schedules_usuario 
@@ -129,25 +95,13 @@ CREATE TABLE schedules (
     CONSTRAINT check_hora_valida CHECK (
         hora_fin > hora_inicio
     )
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Índices para optimizar consultas
 CREATE INDEX idx_schedules_usuario ON schedules(id_usuario);
 CREATE INDEX idx_schedules_asignatura ON schedules(id_asignatura);
 CREATE INDEX idx_schedules_dia ON schedules(dia);
 CREATE INDEX idx_schedules_usuario_dia ON schedules(id_usuario, dia);
-
--- Trigger para actualizar updated_at
-CREATE TRIGGER update_schedules_updated_at
-    BEFORE UPDATE ON schedules
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
-
--- Comentarios
-COMMENT ON TABLE schedules IS 'Tabla de horarios académicos';
-COMMENT ON COLUMN schedules.dia IS 'Día de la semana del horario';
-COMMENT ON COLUMN schedules.hora_inicio IS 'Hora de inicio de la clase';
-COMMENT ON COLUMN schedules.hora_fin IS 'Hora de finalización de la clase';
 
 -- =====================================================
 -- DATOS DE PRUEBA
@@ -263,4 +217,6 @@ INSERT INTO schedules (dia, hora_inicio, hora_fin, id_usuario, id_asignatura) VA
 -- 2. Las horas están en formato 24 horas
 -- 3. Se incluye validación de solapamiento en el backend
 -- 4. Las relaciones entre tablas usan ON DELETE CASCADE
+-- 5. Base de datos: gestion_academica
+-- 6. Usar este script en phpMyAdmin o MySQL Workbench con XAMPP
 

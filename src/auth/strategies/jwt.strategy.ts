@@ -2,13 +2,13 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
-import { SupabaseService } from '../../supabase/supabase.service';
+import { MysqlService } from '../../mysql/mysql.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     private configService: ConfigService,
-    private supabaseService: SupabaseService,
+    private mysqlService: MysqlService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -18,15 +18,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    const supabase = this.supabaseService.getClient();
-    
-    const { data: user, error } = await supabase
-      .from('usuario')
-      .select('id, nombre, correo')
-      .eq('id', payload.sub)
-      .single();
+    const user = await this.mysqlService.queryOne(
+      'SELECT id, nombre, correo FROM usuario WHERE id = ?',
+      [payload.sub],
+    );
 
-    if (error || !user) {
+    if (!user) {
       throw new UnauthorizedException('Usuario no encontrado');
     }
 

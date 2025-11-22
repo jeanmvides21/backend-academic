@@ -3,27 +3,24 @@ import {
   UnauthorizedException,
   BadRequestException,
 } from '@nestjs/common';
-import { SupabaseService } from '../supabase/supabase.service';
+import { MysqlService } from '../mysql/mysql.service';
 import { LoginDto } from './dto/login.dto';
 import { LoginResponseDto } from './dto/login-response.dto';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private supabaseService: SupabaseService,
+    private mysqlService: MysqlService,
   ) {}
 
   async login(loginDto: LoginDto): Promise<LoginResponseDto> {
-    const supabase = this.supabaseService.getClient();
-
     // Buscar usuario por correo y contraseña (sin encriptar por simplicidad)
-    const { data: user, error } = await supabase
-      .from('usuario')
-      .select('id, cedula, nombre, correo, telefono, rol, password')
-      .eq('correo', loginDto.correo)
-      .single();
+    const user = await this.mysqlService.queryOne(
+      'SELECT id, cedula, nombre, correo, telefono, rol, password FROM usuario WHERE correo = ?',
+      [loginDto.correo],
+    );
 
-    if (error || !user) {
+    if (!user) {
       throw new UnauthorizedException('Correo o contraseña incorrectos');
     }
 
@@ -48,15 +45,12 @@ export class AuthService {
   }
 
   async validateUser(id: number): Promise<LoginResponseDto> {
-    const supabase = this.supabaseService.getClient();
+    const user = await this.mysqlService.queryOne(
+      'SELECT id, cedula, nombre, correo, telefono, rol FROM usuario WHERE id = ?',
+      [id],
+    );
 
-    const { data: user, error } = await supabase
-      .from('usuario')
-      .select('id, cedula, nombre, correo, telefono, rol')
-      .eq('id', id)
-      .single();
-
-    if (error || !user) {
+    if (!user) {
       throw new UnauthorizedException('Usuario no encontrado');
     }
 
