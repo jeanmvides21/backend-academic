@@ -42,7 +42,7 @@ export class AuthService {
       rol: user.rol,
     };
     
-    console.log('🔐 Login exitoso - Usuario:', user.nombre, '- Rol:', user.rol);
+    console.log('Login exitoso - Usuario:', user.nombre, '- Rol:', user.rol);
     
     return response;
   }
