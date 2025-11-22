@@ -261,7 +261,6 @@ INSERT INTO schedules (dia, hora_inicio, hora_fin, id_usuario, id_asignatura) VA
 -- =====================================================
 -- 1. Contraseñas almacenadas sin encriptar (solo para propósitos académicos)
 -- 2. Las horas están en formato 24 horas
--- 3. Los días de la semana están en español
--- 4. Se incluye validación de solapamiento en el backend
--- 5. Las relaciones entre tablas usan ON DELETE CASCADE
+-- 3. Se incluye validación de solapamiento en el backend
+-- 4. Las relaciones entre tablas usan ON DELETE CASCADE
 
